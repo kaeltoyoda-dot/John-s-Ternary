@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCPU-3 · Ternary Compute Engine</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;500;700&display=swap');
+
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020d1a;
+  --panel:#040f20;
+  --panel2:#061428;
+  --border:#0e3a6e;
+  --border2:#185FA5;
+  --teal:#1D9E75;--teal2:#0F6E56;--teal3:#9FE1CB;--teal4:#04342C;
+  --amber:#BA7517;--amber2:#FAC775;--amber3:#412402;
+  --blue:#378ADD;--blue2:#85B7EB;--blue3:#B5D4F4;
+  --red:#A32D2D;--red2:#F09595;--red3:#501313;
+  --green:#3B6D11;--green2:#EAF3DE;
+  --dim:#0a1a30;
+  --font-main:'Share Tech Mono',monospace;
+  --font-head:'Orbitron',sans-serif;
+}
+
+body{
+  background:var(--bg);
+  color:var(--blue3);
+  font-family:var(--font-main);
+  min-height:100vh;
+  padding:20px;
+}
+
+/* scanline overlay */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px);
+  pointer-events:none;
+  z-index:999;
+}
+
+.wrap{max-width:860px;margin:0 auto}
+
+/* Header */
+.hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  border:1px solid var(--border2);
+  border-radius:12px;
+  padding:16px 20px;
+  background:var(--panel);
+  margin-bottom:16px;
+  position:relative;
+  overflow:hidden;
+}
+.hdr::after{
+  content:'';
+  position:absolute;bottom:0;left:0;right:0;
+  height:2px;
+  background:linear-gradient(90deg,transparent,var(--teal),var(--blue),transparent);
+  animation:scan 3s linear infinite;
+}
+@keyframes scan{0%{opacity:.4}50%{opacity:1}100%{opacity:.4}}
+
+.hdr-left h1{
+  font-family:var(--font-head);
+  font-size:22px;font-weight:700;
+  color:var(--teal3);
+  letter-spacing:.12em;
+}
+.hdr-left p{font-size:11px;color:var(--blue);margin-top:4px;letter-spacing:.1em}
+
+.hdr-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.badge{
+  font-family:var(--font-head);
+  font-size:10px;font-weight:500;
+  padding:4px 10px;
+  border-radius:4px;
+  letter-spacing:.12em;
+  background:var(--teal4);color:var(--teal3);border:1px solid var(--teal);
+  animation:pulse 2s ease-in-out infinite;
+}
+.badge.warn{background:var(--amber3);color:var(--amber2);border-color:var(--amber);animation:none}
+.badge.fault{background:var(--red3);color:var(--red2);border-color:var(--red);animation:none}
+@keyframes pulse{0%,100%{opacity:.7}50%{opacity:1}}
+.clk{font-size:10px;color:var(--blue);letter-spacing:.1em}
+
+/* Grid layout */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}}
+
+/* Panels */
+.panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:14px;
+}
+.panel-label{
+  font-family:var(--font-head);
+  font-size:9px;font-weight:500;
+  color:var(--blue);
+  letter-spacing:.15em;
+  text-transform:uppercase;
+  margin-bottom:10px;
+}
+
+/* Width selector */
+.wsel{display:flex;gap:6px;margin-bottom:12px}
+.wbtn{
+  font-family:var(--font-main);font-size:11px;
+  padding:5px 12px;
+  background:var(--dim);border:1px solid var(--border);
+  border-radius:5px;color:var(--blue2);cursor:pointer;
+  transition:all .15s;
+}
+.wbtn:hover{border-color:var(--border2);color:var(--blue3)}
+.wbtn.active{background:#0d1f3c;border-color:var(--border2);color:var(--blue3)}
+
+/* Trit buttons */
+.trit-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.trit{
+  width:34px;height:34px;
+  border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:500;
+  cursor:pointer;user-select:none;
+  border:1px solid;
+  transition:all .1s;
+  font-family:var(--font-main);
+}
+.trit.neg{background:var(--amber3);border-color:var(--amber);color:var(--amber2)}
+.trit.neg:hover{background:#5a3003}
+.trit.zero{background:var(--dim);border-color:var(--border);color:var(--blue)}
+.trit.zero:hover{background:#0d1a2f}
+.trit.pos{background:var(--teal4);border-color:var(--teal);color:var(--teal3)}
+.trit.pos:hover{background:#064038}
+
+.dec-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.dec-row label{font-size:11px;color:var(--blue);min-width:30px}
+.dec-in{
+  background:var(--dim);border:1px solid var(--border);
+  border-radius:6px;color:var(--blue3);
+  font-family:var(--font-main);font-size:13px;
+  padding:5px 8px;width:100px;outline:none;
+}
+.dec-in:focus{border-color:var(--teal)}
+.trit-rep{font-size:10px;color:var(--blue);letter-spacing:.05em}
+
+/* Op buttons */
+.ops-grid{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.op{
+  font-family:var(--font-main);font-size:11px;
+  padding:5px 11px;
+  background:var(--dim);border:1px solid var(--border);
+  border-radius:5px;color:var(--blue2);
+  cursor:pointer;letter-spacing:.06em;
+  transition:all .1s;
+}
+.op:hover{border-color:var(--border2);color:var(--blue3)}
+.op.active{background:var(--teal4);border-color:var(--teal);color:var(--teal3)}
+.op.active-shift{background:var(--amber3);border-color:var(--amber);color:var(--amber2)}
+
+.shift-ctrl{
+  display:none;align-items:center;gap:8px;margin-bottom:8px;
+}
+.shift-ctrl label{font-size:11px;color:var(--amber)}
+
+/* Result panel */
+.res-panel{
+  background:var(--panel);
+  border:1px solid var(--teal2);
+  border-radius:10px;
+  padding:16px;
+  margin-bottom:12px;
+}
+.res-main{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+.res-num{
+  font-family:var(--font-head);
+  font-size:42px;font-weight:700;
+  color:var(--teal3);
+  letter-spacing:.04em;
+}
+.res-meta{display:flex;flex-direction:column;gap:3px}
+.res-label{font-size:10px;color:var(--teal);letter-spacing:.12em;text-transform:uppercase;font-family:var(--font-head)}
+.res-note{font-size:11px;color:var(--amber2)}
+
+.res-trits{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:12px}
+.rt{
+  width:24px;height:24px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:500;font-family:var(--font-main);
+  border:1px solid;
+}
+.rt.n{background:var(--amber3);border-color:var(--amber);color:var(--amber2)}
+.rt.z{background:var(--dim);border-color:var(--border);color:var(--blue)}
+.rt.p{background:var(--teal4);border-color:var(--teal);color:var(--teal3)}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{
+  background:var(--dim);border:1px solid var(--border);
+  border-radius:6px;padding:8px;text-align:center;
+}
+.stat-val{font-family:var(--font-head);font-size:15px;font-weight:500;color:var(--blue3)}
+.stat-lbl{font-size:9px;color:var(--blue);letter-spacing:.1em;margin-top:3px;text-transform:uppercase}
+
+/* Error bar */
+.err-bar{
+  background:var(--red3);border:1px solid var(--red);
+  border-radius:6px;padding:7px 10px;
+  font-size:11px;color:var(--red2);
+  margin-bottom:10px;display:none;
+}
+
+/* Pipeline */
+.pipe-panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:14px;
+  margin-bottom:12px;
+}
+.pipe-stages{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.stage{
+  border:1px solid var(--border);
+  border-radius:7px;padding:9px 12px;
+  background:var(--dim);
+  transition:all .25s;
+}
+.stage.active{background:#052b14;border-color:var(--teal)}
+.stage.done{background:#031525;border-color:var(--border);opacity:.6}
+.sn{
+  font-family:var(--font-head);
+  font-size:9px;font-weight:500;color:var(--blue);
+  letter-spacing:.12em;text-transform:uppercase;
+}
+.stage.active .sn{color:var(--teal3)}
+.sv{font-size:11px;color:var(--blue2);margin-top:4px;white-space:pre-wrap;word-break:break-all;line-height:1.6}
+
+.pipe-btns{display:flex;gap:6px;flex-wrap:wrap}
+.pbtn{
+  font-family:var(--font-main);font-size:11px;
+  padding:6px 14px;
+  background:var(--dim);border:1px solid var(--border);
+  border-radius:6px;color:var(--blue2);
+  cursor:pointer;display:flex;align-items:center;gap:6px;
+  transition:all .1s;
+}
+.pbtn:hover{border-color:var(--border2);color:var(--blue3)}
+
+/* Truth tables */
+.tt-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tt-title{font-size:10px;color:var(--blue);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;font-family:var(--font-head)}
+table.truth{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--font-main)}
+table.truth th{padding:4px 8px;color:var(--blue);border-bottom:1px solid var(--border);text-align:center;font-weight:400}
+table.truth td{padding:3px 8px;text-align:center;border-bottom:1px solid #0a1a30}
+table.truth tr:last-child td{border-bottom:none}
+.tv.n{color:var(--amber2)}
+.tv.p{color:var(--teal3)}
+.tv.z{color:var(--blue)}
+
+.divider{border-top:1px solid var(--border);margin:12px 0;opacity:.4}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="hdr-left">
+      <h1>TCPU-3</h1>
+      <p>TERNARY ARITHMETIC LOGIC UNIT · BALANCED TERNARY {−1, 0, +1}</p>
+    </div>
+    <div class="hdr-right">
+      <div class="badge" id="status-badge">READY</div>
+      <div class="clk" id="clock-disp">CLK 0000</div>
+    </div>
+  </div>
+
+  <!-- Word width -->
+  <div class="panel" style="margin-bottom:12px">
+    <div class="panel-label">Word width</div>
+    <div class="wsel" id="wsel">
+      <button class="wbtn" data-w="3">3T · ±13</button>
+      <button class="wbtn active" data-w="6">6T · ±364</button>
+      <button class="wbtn" data-w="9">9T · ±9841</button>
+    </div>
+  </div>
+
+  <!-- Registers -->
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-label">Register A</div>
+      <div class="trit-row" id="tritsA"></div>
+      <div class="dec-row">
+        <label>Dec</label>
+        <input class="dec-in" type="number" id="decA" value="42">
+      </div>
+      <div class="trit-rep" id="repA" style="margin-top:5px"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-label">Register B</div>
+      <div class="trit-row" id="tritsB"></div>
+      <div class="dec-row">
+        <label>Dec</label>
+        <input class="dec-in" type="number" id="decB" value="7">
+      </div>
+      <div class="trit-rep" id="repB" style="margin-top:5px"></div>
+    </div>
+  </div>
+
+  <!-- Instruction set -->
+  <div class="panel" style="margin-bottom:12px">
+    <div class="panel-label">Instruction set</div>
+    <div class="ops-grid" id="ops">
+      <button class="op active" data-op="add">ADD</button>
+      <button class="op" data-op="sub">SUB</button>
+      <button class="op" data-op="mul">MUL</button>
+      <button class="op" data-op="div">TDIV</button>
+      <button class="op" data-op="mod">TMOD</button>
+      <button class="op" data-op="neg">NEG</button>
+      <button class="op" data-op="min">MIN</button>
+      <button class="op" data-op="max">MAX</button>
+      <button class="op" data-op="and">TAND</button>
+      <button class="op" data-op="or">TOR</button>
+      <button class="op" data-op="shl">SHL</button>
+      <button class="op" data-op="shr">SHR</button>
+    </div>
+    <div class="shift-ctrl" id="shift-ctrl">
+      <label>Shift n</label>
+      <input class="dec-in" type="number" id="shift-n" value="1" min="1" max="8" style="width:70px">
+      <span style="font-size:11px;color:var(--amber)">× 3^n per position</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Result -->
+  <div class="panel-label" style="margin-bottom:8px">Output register</div>
+  <div class="err-bar" id="err-bar"></div>
+  <div class="res-panel">
+    <div class="res-main">
+      <div class="res-num" id="res-num">—</div>
+      <div class="res-meta">
+        <div class="res-label">Result</div>
+        <div class="res-note" id="res-note"></div>
+      </div>
+    </div>
+    <div class="res-trits" id="res-trits"></div>
+    <div class="stats">
+      <div class="stat"><div class="stat-val" id="st-carry">—</div><div class="stat-lbl">Carry</div></div>
+      <div class="stat"><div class="stat-val" id="st-width">—</div><div class="stat-lbl">Trit width</div></div>
+      <div class="stat"><div class="stat-val" id="st-range">—</div><div class="stat-lbl">Range</div></div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="pipe-panel">
+    <div class="panel-label">ALU pipeline</div>
+    <div class="pipe-stages" id="pipe-stages">
+      <div class="stage" id="s0"><div class="sn">01 · Fetch operands</div><div class="sv" id="sv0">—</div></div>
+      <div class="stage" id="s1"><div class="sn">02 · Decode instruction</div><div class="sv" id="sv1">—</div></div>
+      <div class="stage" id="s2"><div class="sn">03 · Trit execution</div><div class="sv" id="sv2">—</div></div>
+      <div class="stage" id="s3"><div class="sn">04 · Carry propagation</div><div class="sv" id="sv3">—</div></div>
+      <div class="stage" id="s4"><div class="sn">05 · Write result</div><div class="sv" id="sv4">—</div></div>
+    </div>
+    <div class="pipe-btns">
+      <button class="pbtn" id="p-step">&#9658; Step</button>
+      <button class="pbtn" id="p-run">&#9654;&#9654; Execute</button>
+      <button class="pbtn" id="p-reset">&#8635; Reset</button>
+    </div>
+  </div>
+
+  <!-- Truth tables -->
+  <div class="panel">
+    <div class="panel-label">Ternary truth tables</div>
+    <div class="tt-grid">
+      <div>
+        <div class="tt-title">TAND (tritwise min)</div>
+        <table class="truth" id="t-and"></table>
+      </div>
+      <div>
+        <div class="tt-title">TOR (tritwise max)</div>
+        <table class="truth" id="t-or"></table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SYM={'-1':'−','0':'0','1':'+'};
+const TC={'-1':'n','0':'z','1':'p'};
+let W=6,op='add',pipeStep=-1,pipeData={},clk=0,runInterval=null;
+let stA=[],stB=[];
+
+function maxV(w){return Math.floor((Math.pow(3,w)-1)/2)}
+function toBT(n,len){let t=[],v=n;for(let i=0;i<len;i++){let r=((v%3)+3)%3;if(r===2)r=-1;t.unshift(r);v=Math.floor((v-r)/3);}return t;}
+function fromBT(t){return t.reduce((a,v,i)=>a+v*Math.pow(3,t.length-1-i),0)}
+
+function renderTrits(id,arr,onChange){
+  const c=document.getElementById(id);c.innerHTML='';
+  arr.forEach((v,i)=>{
+    const d=document.createElement('div');
+    d.className='trit '+(v===-1?'neg':v===0?'zero':'pos');
+    d.textContent=SYM[String(v)];
+    d.onclick=()=>{arr[i]=arr[i]===1?-1:arr[i]+1;onChange();};
+    c.appendChild(d);
+  });
+}
+function syncDec(arr,dId,rId){
+  const v=fromBT(arr);
+  document.getElementById(dId).value=v;
+  document.getElementById(rId).textContent='['+arr.map(x=>SYM[String(x)]).join(' ')+']';
+}
+function tritDisp(el,trits){
+  el.innerHTML='';
+  trits.forEach(v=>{
+    const d=document.createElement('div');d.className='rt '+TC[String(v)];d.textContent=SYM[String(v)];el.appendChild(d);
+  });
+}
+
+function compute(a,b){
+  const sn=parseInt(document.getElementById('shift-n').value)||1;
+  switch(op){
+    case 'add':return{r:a+b};case 'sub':return{r:a-b};case 'mul':return{r:a*b};
+    case 'div':return b===0?{r:null,err:'Division by zero'}:{r:Math.trunc(a/b)};
+    case 'mod':return b===0?{r:null,err:'Modulo by zero'}:{r:a-Math.trunc(a/b)*b};
+    case 'neg':return{r:-a};case 'min':return{r:Math.min(a,b)};case 'max':return{r:Math.max(a,b)};
+    case 'and':{let ta=toBT(a,W),tb=toBT(b,W);return{r:fromBT(ta.map((v,i)=>Math.min(v,tb[i])))};}
+    case 'or':{let ta=toBT(a,W),tb=toBT(b,W);return{r:fromBT(ta.map((v,i)=>Math.max(v,tb[i])))};}
+    case 'shl':return{r:Math.round(a*Math.pow(3,sn)),note:'×3^'+sn+'=×'+Math.pow(3,sn)};
+    case 'shr':return{r:Math.trunc(a/Math.pow(3,sn)),note:'÷3^'+sn+'=÷'+Math.pow(3,sn)};
+    default:return{r:0};
+  }
+}
+
+function tick(){clk++;document.getElementById('clock-disp').textContent='CLK '+String(clk).padStart(4,'0');}
+
+function setBadge(txt,cls){
+  const b=document.getElementById('status-badge');b.textContent=txt;
+  b.className='badge'+(cls?' '+cls:'');
+}
+
+function buildPipe(a,b,r,overflow,oc,note){
+  const opNames={add:'ADD — balanced ternary addition with carry chain',sub:'SUB — negate B then add via adder',mul:'MUL — partial product accumulation',div:'TDIV — restoring division, integer quotient',mod:'TMOD — remainder A − B×⌊A/B⌋',neg:'NEG — trit-wise sign inversion (×−1)',min:'MIN — element-wise trit minimum',max:'MAX — element-wise trit maximum',and:'TAND — tritwise min gate',or:'TOR — tritwise max gate',shl:'SHL — multiply by 3^n (left trit-shift)',shr:'SHR — divide by 3^n, truncate (right shift)'};
+  const ta=toBT(a,W),tb=toBT(b,W);
+  pipeData={
+    s0:`A = ${a}  [${ta.map(x=>SYM[String(x)]).join(' ')}]\nB = ${b}  [${tb.map(x=>SYM[String(x)]).join(' ')}]`,
+    s1:opNames[op]||op,
+    s2:r===null?'Cannot execute — operand error':(op==='add'||op==='sub')?
+      ta.slice(-3).map((v,i)=>{const bi=tb.slice(-3)[i];const adj=op==='sub'?-bi:bi;const s=v+adj;const o=s>1?1:s<-1?-1:0;return`T${3-i}: ${SYM[String(v)]}+${SYM[String(adj)]}=${SYM[String(s>1?s-3:s<-1?s+3:s)]} carry${SYM[String(o)]}`}).join('\n'):
+      op==='shl'?`${a} × 3^${document.getElementById('shift-n').value} = ${r}`:
+      op==='shr'?`${a} ÷ 3^${document.getElementById('shift-n').value} = ${r} (truncated)`:
+      `${a} ${op.toUpperCase()} ${b} = ${r}`,
+    s3:r===null?'—':overflow?`Carry out = ${oc>0?'+1':'-1'}\nResult ${r} exceeds ±${maxV(W)}`:`No carry — result ${r} within ±${maxV(W)}`,
+    s4:r===null?'Write suppressed — error flag set':`R = ${r}  [${toBT(r,Math.max(W,1)).map(x=>SYM[String(x)]).join(' ')}]${note?' · '+note:''}`
+  };
+}
+
+function renderResult(){
+  const a=fromBT(stA),b=fromBT(stB);
+  const mx=maxV(W);
+  const{r,err,note}=compute(a,b);
+  const errBar=document.getElementById('err-bar');
+  errBar.style.display='none';
+  if(err){
+    errBar.textContent=err;errBar.style.display='block';
+    document.getElementById('res-num').textContent='ERR';
+    document.getElementById('st-carry').textContent='—';
+    document.getElementById('st-width').textContent='—';
+    document.getElementById('st-range').textContent='±'+mx;
+    document.getElementById('res-trits').innerHTML='';
+    document.getElementById('res-note').textContent='';
+    setBadge('FAULT','fault');
+    buildPipe(a,b,null,false,0,err);resetPipe();return;
+  }
+  const overflow=r>mx||r<-mx;
+  const oc=r>mx?1:r<-mx?-1:0;
+  if(overflow){errBar.textContent='Overflow: '+r+' exceeds ±'+mx+' · carry='+(oc>0?'+1':'-1');errBar.style.display='block';}
+  document.getElementById('res-num').textContent=r;
+  document.getElementById('res-note').textContent=note||'';
+  const needLen=Math.max(W,r===0?1:Math.ceil(Math.log(Math.abs(r)+1)/Math.log(3))+1);
+  tritDisp(document.getElementById('res-trits'),toBT(r,needLen));
+  document.getElementById('st-carry').textContent=overflow?(oc>0?'+1':'-1'):'0';
+  document.getElementById('st-width').textContent=needLen+'T';
+  document.getElementById('st-range').textContent='±'+mx;
+  setBadge(overflow?'OVERFLOW':'READY',overflow?'warn':'');
+  buildPipe(a,b,r,overflow,oc,note);resetPipe();tick();
+}
+
+function resetPipe(){
+  pipeStep=-1;clearInterval(runInterval);
+  for(let i=0;i<5;i++){document.getElementById('s'+i).className='stage';document.getElementById('sv'+i).textContent='—';}
+}
+function stepPipe(){
+  if(pipeStep>=4)return;
+  if(pipeStep>=0)document.getElementById('s'+pipeStep).className='stage done';
+  pipeStep++;
+  document.getElementById('s'+pipeStep).className='stage active';
+  document.getElementById('sv'+pipeStep).textContent=pipeData['s'+pipeStep]||'—';
+}
+
+document.getElementById('p-step').onclick=stepPipe;
+document.getElementById('p-run').onclick=()=>{resetPipe();runInterval=setInterval(()=>{stepPipe();if(pipeStep>=4)clearInterval(runInterval);},550);};
+document.getElementById('p-reset').onclick=resetPipe;
+
+document.getElementById('decA').oninput=e=>{
+  let v=Math.max(-maxV(W),Math.min(maxV(W),parseInt(e.target.value)||0));
+  stA=toBT(v,W);renderTrits('tritsA',stA,updateA);syncDec(stA,'decA','repA');renderResult();
+};
+document.getElementById('decB').oninput=e=>{
+  let v=Math.max(-maxV(W),Math.min(maxV(W),parseInt(e.target.value)||0));
+  stB=toBT(v,W);renderTrits('tritsB',stB,updateB);syncDec(stB,'decB','repB');renderResult();
+};
+document.getElementById('shift-n').oninput=renderResult;
+
+function updateA(){renderTrits('tritsA',stA,updateA);syncDec(stA,'decA','repA');renderResult();}
+function updateB(){renderTrits('tritsB',stB,updateB);syncDec(stB,'decB','repB');renderResult();}
+
+document.getElementById('ops').onclick=e=>{
+  const btn=e.target.closest('.op');if(!btn)return;
+  document.querySelectorAll('.op').forEach(b=>b.classList.remove('active','active-shift'));
+  op=btn.dataset.op;
+  const isShift=op==='shl'||op==='shr';
+  btn.classList.add(isShift?'active-shift':'active');
+  document.getElementById('shift-ctrl').style.display=isShift?'flex':'none';
+  renderResult();
+};
+
+document.getElementById('wsel').onclick=e=>{
+  const btn=e.target.closest('.wbtn');if(!btn)return;
+  document.querySelectorAll('.wbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');W=parseInt(btn.dataset.w);
+  const mx=maxV(W);
+  let a=Math.max(-mx,Math.min(mx,parseInt(document.getElementById('decA').value)||0));
+  let b=Math.max(-mx,Math.min(mx,parseInt(document.getElementById('decB').value)||0));
+  stA=toBT(a,W);stB=toBT(b,W);updateA();updateB();
+};
+
+function buildTT(id,fn){
+  const t=document.getElementById(id);
+  t.innerHTML='<tr><th>A\\B</th><th>−1</th><th>0</th><th>+1</th></tr>';
+  [-1,0,1].forEach(a=>{
+    const tr=document.createElement('tr');
+    let row=`<td class="tv ${TC[String(a)]}">${SYM[String(a)]}</td>`;
+    [-1,0,1].forEach(b=>{const r=fn(a,b);row+=`<td class="tv ${TC[String(r)]}">${SYM[String(r)]}</td>`;});
+    tr.innerHTML=row;t.appendChild(tr);
+  });
+}
+buildTT('t-and',(a,b)=>Math.min(a,b));
+buildTT('t-or',(a,b)=>Math.max(a,b));
+
+stA=toBT(42,W);stB=toBT(7,W);updateA();updateB();
+</script>
+</body>
+</html>
