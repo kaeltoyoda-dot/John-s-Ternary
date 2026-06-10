@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEURO·SIM v2.0 — LIF + STDP</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;500;700&display=swap');
+
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#03060B;
+  --panel:#040C18;
+  --panel2:#060F1E;
+  --dim:#081525;
+  --border:#0B3060;
+  --border2:#155FA0;
+  --teal:#00D4AA;--teal2:#00875E;--teal3:#00FFB0;--teal4:#052B14;
+  --amber:#BA7517;--amber2:#FAC775;--amber3:#412402;
+  --blue:#3A8ADD;--blue2:#85B7EB;--blue3:#B5D4F4;
+  --red:#A32D2D;--red2:#F09595;--red3:#3D0A0A;
+  --orange:#FF6030;--orange2:#FF9060;
+  --mono:'Share Tech Mono',monospace;
+  --head:'Orbitron',sans-serif;
+}
+
+body{
+  background:var(--bg);
+  color:var(--blue3);
+  font-family:var(--mono);
+  min-height:100vh;
+  padding:12px;
+}
+
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 4px);
+}
+
+/* ── Layout ── */
+.shell{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+
+/* ── Header ── */
+.hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--panel);border:1px solid var(--border2);border-radius:10px;
+  padding:12px 18px;position:relative;overflow:hidden;
+}
+.hdr::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--teal),var(--blue),var(--teal),transparent);
+  animation:sweep 4s linear infinite;
+}
+@keyframes sweep{0%{opacity:.3}50%{opacity:1}100%{opacity:.3}}
+.hdr-title{font-family:var(--head);font-size:18px;font-weight:700;color:var(--teal3);letter-spacing:.18em}
+.hdr-sub{font-size:9px;color:var(--blue);letter-spacing:.14em;margin-top:3px}
+.hdr-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.badge{
+  font-family:var(--head);font-size:9px;font-weight:500;
+  padding:3px 10px;border-radius:3px;letter-spacing:.12em;
+  background:var(--teal4);color:var(--teal3);border:1px solid var(--teal2);
+  animation:blink 2.5s ease-in-out infinite;
+}
+.badge.warn{background:var(--amber3);color:var(--amber2);border-color:var(--amber);animation:none}
+.badge.fault{background:var(--red3);color:var(--red2);border-color:var(--red);animation:none}
+@keyframes blink{0%,100%{opacity:.6}50%{opacity:1}}
+.hdr-stats{display:flex;gap:14px;font-size:9px;color:var(--blue)}
+.hdr-stats span{letter-spacing:.08em}
+.ltp-stat{color:rgba(0,255,120,.7)}
+.ltd-stat{color:rgba(255,100,0,.7)}
+
+/* ── Main grid ── */
+.main{display:grid;grid-template-columns:1fr 240px;gap:10px}
+@media(max-width:700px){.main{grid-template-columns:1fr}}
+
+/* ── Panels ── */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:12px}
+.plabel{
+  font-family:var(--head);font-size:8px;font-weight:500;
+  color:var(--blue);letter-spacing:.16em;text-transform:uppercase;margin-bottom:8px;
+}
+
+/* ── Canvas ── */
+canvas{display:block;width:100%;border-radius:5px;border:1px solid var(--border)}
+
+/* ── Controls ── */
+.ctrl-section{display:flex;flex-direction:column;gap:9px}
+
+.toggle-row{display:flex;justify-content:space-between;align-items:center}
+.toggle-label{font-size:8px;color:var(--blue);letter-spacing:.1em}
+.toggle-btn{
+  font-family:var(--mono);font-size:8px;letter-spacing:.1em;
+  padding:3px 10px;border-radius:3px;cursor:pointer;
+  transition:all .15s;
+}
+.toggle-btn.on{background:rgba(0,255,150,.12);border:1px solid rgba(0,255,150,.5);color:var(--teal3)}
+.toggle-btn.off{background:rgba(60,60,80,.3);border:1px solid rgba(80,80,100,.3);color:rgba(80,120,160,.6)}
+
+.slider-group{}
+.slider-header{display:flex;justify-content:space-between;font-size:7px;color:rgba(80,160,220,.7);margin-bottom:3px}
+.slider-val{color:var(--teal3)}
+.slider-val.ltp{color:rgba(0,255,120,.8)}
+.slider-val.ltd{color:rgba(255,100,0,.8)}
+input[type=range]{
+  width:100%;cursor:pointer;
+  accent-color:var(--teal2);
+  height:3px;
+}
+input[type=range].ltp-range{accent-color:#00FF80}
+input[type=range].ltd-range{accent-color:#FF6020}
+
+.probe-label{font-size:7px;color:rgba(80,160,220,.7);margin-bottom:5px}
+.probe-btns{display:flex;flex-wrap:wrap;gap:3px}
+.probe-btn{
+  font-family:var(--mono);font-size:7px;
+  padding:2px 5px;border-radius:2px;cursor:pointer;transition:all .1s;
+}
+.probe-btn.sel{background:rgba(0,200,150,.18);border:1px solid var(--teal3);color:var(--teal3)}
+.probe-btn.unsel{background:rgba(0,40,80,.5);border:1px solid rgba(0,80,120,.4);color:rgba(80,160,220,.7)}
+
+.run-row{display:flex;gap:7px}
+.run-btn{
+  flex:1;padding:8px 0;font-family:var(--mono);font-size:9px;letter-spacing:.1em;
+  border-radius:4px;cursor:pointer;transition:all .15s;
+}
+.run-btn.running{background:rgba(255,60,0,.15);border:1px solid rgba(255,60,0,.5);color:var(--orange)}
+.run-btn.stopped{background:rgba(0,200,150,.13);border:1px solid rgba(0,255,150,.45);color:var(--teal3)}
+.rst-btn{
+  padding:8px 12px;font-family:var(--mono);font-size:9px;
+  background:rgba(0,40,80,.5);border:1px solid rgba(0,80,120,.4);
+  color:rgba(80,160,220,.7);border-radius:4px;cursor:pointer;
+}
+
+.legend{font-size:7px;color:rgba(60,100,140,.7);line-height:2;border-top:1px solid rgba(0,60,100,.3);padding-top:7px}
+.leg-ltp{color:rgba(0,255,120,.7)}
+.leg-ltd{color:rgba(255,100,0,.7)}
+.leg-ring{color:rgba(0,200,255,.6)}
+
+/* ── Event log ── */
+.event-log{
+  background:rgba(0,15,30,.8);border:1px solid var(--border);
+  border-radius:6px;padding:7px;height:72px;overflow-y:auto;
+}
+.event-log-label{font-size:7px;color:rgba(0,120,180,.5);letter-spacing:.14em;margin-bottom:4px}
+.event-empty{font-size:7px;color:rgba(60,100,140,.5)}
+.ev-ltp{font-size:7px;color:rgba(0,255,120,.8);line-height:1.7}
+.ev-ltd{font-size:7px;color:rgba(255,100,0,.8);line-height:1.7}
+
+.left-col{display:flex;flex-direction:column;gap:10px}
+.right-col{display:flex;flex-direction:column;gap:10px}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">NEURO·SIM v2.0</div>
+      <div class="hdr-sub">LEAKY INTEGRATE-AND-FIRE · SPIKE-TIMING DEPENDENT PLASTICITY</div>
+    </div>
+    <div class="hdr-right">
+      <div class="badge" id="badge">READY</div>
+      <div class="hdr-stats">
+        <span class="ltp-stat">LTP: <span id="ltp-count">0</span></span>
+        <span class="ltd-stat">LTD: <span id="ltd-count">0</span></span>
+        <span>t=<span id="sim-time">0</span>ms</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Left column -->
+    <div class="left-col">
+
+      <div class="panel">
+        <div class="plabel">Neural network · edge width ∝ weight · dashed ring = xPre trace · click to probe</div>
+        <canvas id="net-canvas" width="700" height="300"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="plabel">Membrane potential · <span id="probe-label">OUT</span></div>
+        <canvas id="trace-canvas" width="700" height="80"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="plabel">Synaptic weight matrix · <span class="leg-ltp">■ LTP</span> · <span class="leg-ltd">■ LTD</span></div>
+        <canvas id="wt-canvas" width="700" height="90"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="plabel">Spike raster · 500ms window</div>
+        <canvas id="raster-canvas" width="700" height="120"></canvas>
+      </div>
+
+      <div class="event-log">
+        <div class="event-log-label">STDP EVENT LOG (sampled 5%)</div>
+        <div id="event-log-body"><div class="event-empty">No events yet — run simulation with learning enabled</div></div>
+      </div>
+
+    </div>
+
+    <!-- Right column -->
+    <div class="right-col">
+      <div class="panel ctrl-section">
+
+        <!-- Learning toggle -->
+        <div class="toggle-row">
+          <span class="toggle-label">STDP LEARNING</span>
+          <button class="toggle-btn on" id="learn-btn">ON</button>
+        </div>
+
+        <!-- Sliders -->
+        <div class="slider-group">
+          <div class="slider-header"><span>INPUT RATE</span><span class="slider-val" id="v-inputRate">25Hz</span></div>
+          <input type="range" id="s-inputRate" min="5" max="80" step="1" value="25">
+        </div>
+        <div class="slider-group">
+          <div class="slider-header"><span>EXT CURRENT</span><span class="slider-val" id="v-inputCurrent">14pA</span></div>
+          <input type="range" id="s-inputCurrent" min="5" max="30" step="1" value="14">
+        </div>
+        <div class="slider-group">
+          <div class="slider-header"><span>NOISE σ</span><span class="slider-val" id="v-noise">2</span></div>
+          <input type="range" id="s-noise" min="0" max="8" step="0.5" value="2">
+        </div>
+        <div class="slider-group">
+          <div class="slider-header"><span>A⁺ LTP RATE</span><span class="slider-val ltp" id="v-aPlus">0.008</span></div>
+          <input type="range" class="ltp-range" id="s-aPlus" min="0.001" max="0.03" step="0.001" value="0.008">
+        </div>
+        <div class="slider-group">
+          <div class="slider-header"><span>A⁻ LTD RATE</span><span class="slider-val ltd" id="v-aMinus">0.009</span></div>
+          <input type="range" class="ltd-range" id="s-aMinus" min="0.001" max="0.03" step="0.001" value="0.009">
+        </div>
+
+        <!-- Probe selector -->
+        <div>
+          <div class="probe-label">PROBE NEURON</div>
+          <div class="probe-btns" id="probe-btns"></div>
+        </div>
+
+        <!-- Run / Reset -->
+        <div class="run-row">
+          <button class="run-btn stopped" id="run-btn">▶ RUN</button>
+          <button class="rst-btn" id="rst-btn">RST</button>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend">
+          <div><span class="leg-ltp">■</span> LTP — pre before post, weight ↑</div>
+          <div><span class="leg-ltd">■</span> LTD — post before pre, weight ↓</div>
+          <div><span class="leg-ring">◌</span> Dashed ring = xPre trace magnitude</div>
+          <div>Edge width ∝ current synaptic weight</div>
+          <div>A⁺ &gt; A⁻ → net potentiation over time</div>
+          <div>Click any neuron to probe its Vm</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Constants ─────────────────────────────────────────────────────
+const TAU_M    = 20;
+const V_REST   = -70;
+const V_THRESH = -55;
+const V_RESET  = -75;
+const R_M      = 1;
+const DT       = 0.5;
+const REFRAC_T = 3;
+const TAU_LTP  = 20;
+const TAU_LTD  = 20;
+const W_MIN    = 0;
+const W_MAX    = 15;
+const FLASH_DUR = 120;
+
+// ── Topology ──────────────────────────────────────────────────────
+const NODES = [
+  {id:0, x:.13, y:.22, label:'IN·A', type:'input'},
+  {id:1, x:.13, y:.50, label:'IN·B', type:'input'},
+  {id:2, x:.13, y:.78, label:'IN·C', type:'input'},
+  {id:3, x:.38, y:.18, label:'H·1',  type:'hidden'},
+  {id:4, x:.38, y:.50, label:'H·2',  type:'hidden'},
+  {id:5, x:.38, y:.82, label:'H·3',  type:'hidden'},
+  {id:6, x:.63, y:.30, label:'H·4',  type:'hidden'},
+  {id:7, x:.63, y:.70, label:'H·5',  type:'hidden'},
+  {id:8, x:.88, y:.50, label:'OUT',  type:'output'},
+];
+const EDGE_DEFS = [
+  {f:0,t:3,w0:9},{f:0,t:4,w0:5},
+  {f:1,t:3,w0:4},{f:1,t:4,w0:10},{f:1,t:5,w0:6},
+  {f:2,t:4,w0:7},{f:2,t:5,w0:9},
+  {f:3,t:6,w0:8},{f:3,t:7,w0:4},
+  {f:4,t:6,w0:6},{f:4,t:7,w0:8},
+  {f:5,t:6,w0:3},{f:5,t:7,w0:7},
+  {f:6,t:8,w0:9},{f:7,t:8,w0:8},
+];
+
+// ── State ─────────────────────────────────────────────────────────
+function freshState() {
+  return {
+    neurons: NODES.map(n => ({
+      ...n,
+      v:      V_REST,
+      refrac: 0,
+      spiked: false,
+      spikes: [],
+      vBuf:   new Array(300).fill(V_REST),
+      xPre:   0,
+      xPost:  0,
+    })),
+    weights:    new Float32Array(EDGE_DEFS.map(e => e.w0)),
+    edgeFlash:  new Array(EDGE_DEFS.length).fill(null),
+    pulses:     [],
+    time:       0,
+    ltpCount:   0,
+    ltdCount:   0,
+  };
+}
+
+let state = freshState();
+let running   = false;
+let learning  = true;
+let selNeuron = 8;
+let animId    = null;
+let eventLog  = [];
+
+const params = {
+  inputRate:    25,
+  inputCurrent: 14,
+  noise:        2,
+  aPlus:        0.008,
+  aMinus:       0.009,
+};
+
+// ── Simulation step (fixed) ───────────────────────────────────────
+function step() {
+  const s = state;
+  const { neurons, weights, edgeFlash, pulses } = s;
+  const I_syn = new Float32Array(neurons.length);
+
+  // 1. Decay STDP traces
+  const decayPre  = Math.exp(-DT / TAU_LTP);
+  const decayPost = Math.exp(-DT / TAU_LTD);
+  for (let i = 0; i < neurons.length; i++) {
+    neurons[i].xPre  *= decayPre;
+    neurons[i].xPost *= decayPost;
+  }
+
+  // 2. Age edge flashes
+  for (let e = 0; e < edgeFlash.length; e++) {
+    if (edgeFlash[e]) {
+      edgeFlash[e].age += DT;
+      if (edgeFlash[e].age > FLASH_DUR) edgeFlash[e] = null;
+    }
+  }
+
+  // 3. Advance synaptic pulses (dt-scaled current)
+  const alive = [];
+  for (const pulse of pulses) {
+    pulse.t += DT;
+    if (pulse.t >= pulse.dur) {
+      I_syn[pulse.to] += weights[pulse.edgeIdx] * 4 * (DT / 0.5);
+    } else {
+      alive.push(pulse);
+    }
+  }
+  s.pulses = alive;
+
+  // 4. Poisson input spikes
+  const lambda = (params.inputRate / 1000) * DT;
+  for (let i = 0; i < 3; i++) {
+    if (Math.random() < lambda) I_syn[i] += params.inputCurrent;
+  }
+
+  // 5. LIF update — collect spikes first, apply STDP after
+  const now = s.time;
+  const firedThisStep = [];
+
+  for (let i = 0; i < neurons.length; i++) {
+    const n = neurons[i];
+    n.spiked = false;
+
+    if (n.refrac > 0) {
+      n.refrac -= DT;
+      n.v = V_RESET;
+    } else {
+      const noise = (Math.random() - 0.5) * params.noise;
+      n.v += (DT / TAU_M) * (-(n.v - V_REST) + R_M * (I_syn[i] + noise));
+      n.v = Math.max(V_RESET - 5, n.v); // soft floor only, no upper clamp
+
+      if (n.v >= V_THRESH) {
+        n.spiked  = true;
+        n.v       = V_RESET;
+        n.refrac  = REFRAC_T;
+        n.spikes.push(now);
+        if (n.spikes.length > 150) n.spikes.shift();
+
+        // FIX: increment traces BEFORE STDP so this spike contributes
+        n.xPre  += 1;
+        n.xPost += 1;
+
+        firedThisStep.push(i);
+
+        // Emit downstream pulses
+        for (let e = 0; e < EDGE_DEFS.length; e++) {
+          if (EDGE_DEFS[e].f === i) {
+            s.pulses.push({from:i, to:EDGE_DEFS[e].t, edgeIdx:e, t:0, dur:6});
+          }
+        }
+      }
+    }
+
+    n.vBuf.push(n.v);
+    if (n.vBuf.length > 300) n.vBuf.shift();
+  }
+
+  // 6. STDP — fully separated LTP and LTD passes
+  // FIX: single pass over edges after all neurons updated.
+  // LTP: post just fired → potentiate if pre was recently active (xPre)
+  // LTD: pre just fired  → depress   if post was recently active (xPost)
+  if (learning && firedThisStep.length > 0) {
+    const newEvents = [];
+    for (let e = 0; e < EDGE_DEFS.length; e++) {
+      const { f: pre, t: post } = EDGE_DEFS[e];
+
+      // LTP — post spiked, reward pre's contribution
+      if (firedThisStep.includes(post)) {
+        const dw = params.aPlus * neurons[pre].xPre;
+        if (dw > 0.0001) {
+          weights[e] = Math.min(W_MAX, weights[e] + dw);
+          edgeFlash[e] = {type:'ltp', age:0};
+          s.ltpCount++;
+          if (Math.random() < 0.05)
+            newEvents.push({t:now.toFixed(0), e, type:'LTP', dw:dw.toFixed(4), w:weights[e].toFixed(2)});
+        }
+      }
+
+      // LTD — pre spiked, penalise if post was already active
+      if (firedThisStep.includes(pre)) {
+        const dw = params.aMinus * neurons[post].xPost;
+        if (dw > 0.0001) {
+          weights[e] = Math.max(W_MIN, weights[e] - dw);
+          // only overwrite flash if not already LTP (LTP wins on same step)
+          if (!edgeFlash[e] || edgeFlash[e].type !== 'ltp')
+            edgeFlash[e] = {type:'ltd', age:0};
+          s.ltdCount++;
+          if (Math.random() < 0.05)
+            newEvents.push({t:now.toFixed(0), e, type:'LTD', dw:(-dw).toFixed(4), w:weights[e].toFixed(2)});
+        }
+      }
+    }
+    if (newEvents.length > 0) {
+      eventLog = [...newEvents, ...eventLog].slice(0, 24);
+      renderEventLog();
+    }
+  }
+
+  s.time += DT;
+}
+
+// ── Canvas refs ───────────────────────────────────────────────────
+const netCanvas    = document.getElementById('net-canvas');
+const traceCanvas  = document.getElementById('trace-canvas');
+const wtCanvas     = document.getElementById('wt-canvas');
+const rasterCanvas = document.getElementById('raster-canvas');
+
+function resizeCanvas(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr  = window.devicePixelRatio || 1;
+  if (canvas.width !== Math.round(rect.width * dpr)) {
+    canvas.width  = Math.round(rect.width  * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    canvas.getContext('2d').scale(dpr, dpr);
+  }
+}
+function cw(canvas){ return canvas.getBoundingClientRect().width; }
+function ch(canvas){ return canvas.getBoundingClientRect().height; }
+
+// ── Draw: Network ─────────────────────────────────────────────────
+function drawNet() {
+  const canvas = netCanvas;
+  resizeCanvas(canvas);
+  const ctx = canvas.getContext('2d');
+  const W = cw(canvas), H = ch(canvas);
+  const { neurons, weights, edgeFlash, pulses } = state;
+
+  ctx.fillStyle = '#050810'; ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0,80,120,.06)'; ctx.lineWidth = 1;
+  for (let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for (let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  // Edges
+  for (let e=0; e<EDGE_DEFS.length; e++) {
+    const {f,t} = EDGE_DEFS[e];
+    const A=NODES[f], B=NODES[t];
+    const ax=A.x*W, ay=A.y*H, bx=B.x*W, by=B.y*H;
+    const norm = weights[e] / W_MAX;
+    const flash = edgeFlash[e];
+    let r=0, g=120, b=200, alpha=0.08+norm*0.3;
+
+    if (flash) {
+      const f2 = Math.max(0, 1 - flash.age / FLASH_DUR);
+      if (flash.type==='ltp'){r=0;  g=255;b=120;alpha=0.15+f2*.7;}
+      else                   {r=255;g=60; b=0;  alpha=0.15+f2*.7;}
+    }
+
+    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.lineWidth   = 0.4 + norm*4;
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+
+    const mx=(ax+bx)/2, my=(ay+by)/2;
+    ctx.fillStyle = flash
+      ? (flash.type==='ltp'?`rgba(0,255,120,${Math.max(.4,1-flash.age/FLASH_DUR)})`:`rgba(255,80,0,${Math.max(.4,1-flash.age/FLASH_DUR)})`)
+      : 'rgba(60,110,160,.5)';
+    ctx.font='6px "Share Tech Mono"'; ctx.textAlign='center';
+    ctx.fillText(weights[e].toFixed(1), mx, my);
+  }
+
+  // Pulse particles
+  for (const p of pulses) {
+    const A=NODES[p.from], B=NODES[p.to];
+    const frac = Math.min(1, p.t/p.dur);
+    const px=A.x*W+(B.x*W-A.x*W)*frac;
+    const py=A.y*H+(B.y*H-A.y*H)*frac;
+    const g=ctx.createRadialGradient(px,py,0,px,py,8);
+    g.addColorStop(0,'rgba(0,255,180,.9)'); g.addColorStop(1,'rgba(0,255,180,0)');
+    ctx.beginPath(); ctx.arc(px,py,8,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+  }
+
+  // Neurons
+  for (let i=0; i<neurons.length; i++) {
+    const n=neurons[i];
+    const cx=n.x*W, cy=n.y*H;
+    const norm=Math.max(0,Math.min(1,(n.v-V_REST)/(V_THRESH-V_REST)));
+    const sel=i===selNeuron;
+
+    if (n.spiked) {
+      const glow=ctx.createRadialGradient(cx,cy,0,cx,cy,38);
+      glow.addColorStop(0,'rgba(0,255,150,.4)'); glow.addColorStop(1,'rgba(0,255,150,0)');
+      ctx.beginPath(); ctx.arc(cx,cy,38,0,Math.PI*2); ctx.fillStyle=glow; ctx.fill();
+    }
+
+    // xPre trace ring
+    const traceR = 18 + n.xPre*5;
+    ctx.strokeStyle=`rgba(0,200,255,${Math.min(.55, n.xPre*.45)})`;
+    ctx.lineWidth=1; ctx.setLineDash([2,3]);
+    ctx.beginPath(); ctx.arc(cx,cy,traceR,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    if (sel) {
+      ctx.strokeStyle='rgba(255,200,0,.7)';
+      ctx.lineWidth=2; ctx.setLineDash([4,3]);
+      ctx.beginPath(); ctx.arc(cx,cy,22,0,Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const R=13;
+    const bg=ctx.createRadialGradient(cx-3,cy-3,1,cx,cy,R);
+    if (n.spiked){
+      bg.addColorStop(0,'#00FFB0'); bg.addColorStop(1,'#006644');
+    } else if (n.type==='input'){
+      bg.addColorStop(0,`rgb(${20+norm*100},${100+norm*100},220)`);
+      bg.addColorStop(1,`rgb(${10+norm*50},${40+norm*60},100)`);
+    } else if (n.type==='output'){
+      bg.addColorStop(0,`rgb(${200+norm*55},${80+norm*80},${20+norm*20})`);
+      bg.addColorStop(1,`rgb(${80+norm*40},${30+norm*30},10)`);
+    } else {
+      bg.addColorStop(0,`rgb(${20+norm*60},${60+norm*160},${180+norm*40})`);
+      bg.addColorStop(1,`rgb(${10+norm*30},${30+norm*80},80)`);
+    }
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fillStyle=bg; ctx.fill();
+    ctx.strokeStyle=n.spiked?'#00FFB0':`rgba(0,${80+norm*175},255,.8)`;
+    ctx.lineWidth=n.spiked?2:1; ctx.setLineDash([]);
+    ctx.stroke();
+
+    ctx.fillStyle=n.spiked?'#00FFB0':'rgba(150,200,255,.9)';
+    ctx.font='bold 8px "Share Tech Mono"'; ctx.textAlign='center';
+    ctx.fillText(n.label, cx, cy+R+11);
+    ctx.fillStyle='rgba(80,140,200,.6)'; ctx.font='7px "Share Tech Mono"';
+    ctx.fillText(`${n.v.toFixed(0)}mV`, cx, cy+R+21);
+  }
+}
+
+// ── Draw: Voltage trace ───────────────────────────────────────────
+function drawTrace() {
+  const canvas = traceCanvas;
+  resizeCanvas(canvas);
+  const ctx = canvas.getContext('2d');
+  const W = cw(canvas), H = ch(canvas);
+  const n = state.neurons[selNeuron];
+  if (!n) return;
+
+  ctx.fillStyle='#04080E'; ctx.fillRect(0,0,W,H);
+
+  // Threshold line
+  const V_SPAN = 30;
+  const normT  = (V_THRESH-(V_REST-5))/V_SPAN;
+  const yT     = H - normT*H;
+  ctx.strokeStyle='rgba(255,80,0,.3)'; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,yT); ctx.lineTo(W,yT); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(255,80,0,.5)'; ctx.font='7px "Share Tech Mono"'; ctx.textAlign='left';
+  ctx.fillText(`θ ${V_THRESH}mV`, 3, yT-3);
+
+  // Vm line
+  const buf = n.vBuf;
+  const sw  = W / buf.length;
+  ctx.beginPath();
+  for (let i=0; i<buf.length; i++) {
+    const x=i*sw, norm2=(buf[i]-(V_REST-5))/V_SPAN, y=H-norm2*H;
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  const grad=ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0,'rgba(0,180,255,.1)'); grad.addColorStop(1,'rgba(0,255,180,.9)');
+  ctx.strokeStyle=grad; ctx.lineWidth=1.5; ctx.stroke();
+
+  // Fill under
+  const lastX=(buf.length-1)*sw;
+  const lastNorm=(buf[buf.length-1]-(V_REST-5))/V_SPAN;
+  ctx.lineTo(lastX,H); ctx.lineTo(0,H); ctx.closePath();
+  const fill=ctx.createLinearGradient(0,0,0,H);
+  fill.addColorStop(0,'rgba(0,255,180,.12)'); fill.addColorStop(1,'rgba(0,255,180,0)');
+  ctx.fillStyle=fill; ctx.fill();
+
+  ctx.fillStyle='rgba(0,220,160,.8)'; ctx.font='7px "Share Tech Mono"'; ctx.textAlign='left';
+  ctx.fillText(`Vm — ${n.label}  ${n.v.toFixed(1)}mV  |  xPre: ${n.xPre.toFixed(3)}  xPost: ${n.xPost.toFixed(3)}`, 4, 10);
+}
+
+// ── Draw: Weight matrix ───────────────────────────────────────────
+function drawWeightMatrix() {
+  const canvas = wtCanvas;
+  resizeCanvas(canvas);
+  const ctx = canvas.getContext('2d');
+  const W = cw(canvas), H = ch(canvas);
+  const { weights, edgeFlash } = state;
+
+  ctx.fillStyle='#04080E'; ctx.fillRect(0,0,W,H);
+  const cols=5, rows=Math.ceil(EDGE_DEFS.length/cols);
+  const cw2=W/cols, rh=H/rows;
+
+  for (let e=0; e<EDGE_DEFS.length; e++) {
+    const col=e%cols, row=Math.floor(e/cols);
+    const x=col*cw2, y=row*rh;
+    const norm=weights[e]/W_MAX;
+    const flash=edgeFlash[e];
+    let bg=`rgba(0,${Math.floor(40+norm*160)},${Math.floor(80+norm*120)},.5)`;
+    if (flash){
+      const f=Math.max(0,1-flash.age/FLASH_DUR);
+      bg=flash.type==='ltp'?`rgba(0,${Math.floor(150+f*105)},${Math.floor(80*f)},.7)`:`rgba(${Math.floor(150+f*105)},${Math.floor(40*f)},0,.7)`;
+    }
+    ctx.fillStyle=bg; ctx.fillRect(x+1,y+1,cw2-2,rh-2);
+    ctx.fillStyle=flash?(flash.type==='ltp'?'rgba(0,255,120,.95)':'rgba(255,100,0,.95)'):'rgba(120,180,220,.8)';
+    ctx.font='6px "Share Tech Mono"'; ctx.textAlign='center';
+    ctx.fillText(`${NODES[EDGE_DEFS[e].f].label}→${NODES[EDGE_DEFS[e].t].label}`, x+cw2/2, y+rh*.38);
+    ctx.fillStyle=flash?(flash.type==='ltp'?'#00FF80':'#FF6020'):'rgba(200,230,255,.9)';
+    ctx.font='bold 8px "Share Tech Mono"';
+    ctx.fillText(weights[e].toFixed(2), x+cw2/2, y+rh*.75);
+  }
+}
+
+// ── Draw: Raster ──────────────────────────────────────────────────
+function drawRaster() {
+  const canvas = rasterCanvas;
+  resizeCanvas(canvas);
+  const ctx = canvas.getContext('2d');
+  const W = cw(canvas), H = ch(canvas);
+  const { neurons, time } = state;
+  const WINDOW = 500, N = neurons.length;
+
+  ctx.fillStyle='#060A10'; ctx.fillRect(0,0,W,H);
+
+  neurons.forEach((n,i) => {
+    const rowH=H/N, ry=i*rowH;
+    ctx.strokeStyle='rgba(0,80,120,.2)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,ry); ctx.lineTo(W,ry); ctx.stroke();
+    ctx.fillStyle=n.type==='input'?'rgba(80,160,255,.7)':n.type==='output'?'rgba(255,140,60,.7)':'rgba(0,200,180,.6)';
+    ctx.font='7px "Share Tech Mono"'; ctx.textAlign='left';
+    ctx.fillText(n.label, 3, ry+rowH*.65);
+    n.spikes.forEach(st => {
+      const age=time-st;
+      if (age<WINDOW) {
+        const x=W*(1-age/WINDOW), alpha=Math.max(0,1-age/WINDOW);
+        ctx.fillStyle=`rgba(0,255,150,${alpha})`;
+        ctx.fillRect(x-1, ry+rowH*.15, 2, rowH*.7);
+      }
+    });
+  });
+
+  ctx.fillStyle='rgba(60,100,140,.7)'; ctx.font='7px "Share Tech Mono"';
+  ctx.textAlign='right'; ctx.fillText(`−${WINDOW}ms`,W-2,H-3);
+  ctx.textAlign='left';  ctx.fillText('now',2,H-3);
+}
+
+// ── Render all ────────────────────────────────────────────────────
+function renderAll() {
+  drawNet(); drawTrace(); drawWeightMatrix(); drawRaster();
+  document.getElementById('ltp-count').textContent = state.ltpCount;
+  document.getElementById('ltd-count').textContent = state.ltdCount;
+  document.getElementById('sim-time').textContent  = state.time.toFixed(0);
+}
+
+// ── Event log ─────────────────────────────────────────────────────
+function renderEventLog() {
+  const el = document.getElementById('event-log-body');
+  if (eventLog.length===0){
+    el.innerHTML='<div class="event-empty">No events yet — run simulation with learning enabled</div>';
+    return;
+  }
+  el.innerHTML = eventLog.map(ev =>
+    `<div class="${ev.type==='LTP'?'ev-ltp':'ev-ltd'}">t=${ev.t}ms · ${ev.type} · ${NODES[EDGE_DEFS[ev.e].f].label}→${NODES[EDGE_DEFS[ev.e].t].label} · Δw=${ev.dw} → w=${ev.w}</div>`
+  ).join('');
+}
+
+// ── Animation loop ────────────────────────────────────────────────
+let lastTs = 0;
+function loop(ts) {
+  if (ts - lastTs > 16) {
+    for (let i=0; i<10; i++) step();
+    renderAll();
+    lastTs = ts;
+  }
+  animId = requestAnimationFrame(loop);
+}
+
+function startSim()  { if (!running){ running=true;  animId=requestAnimationFrame(loop); } }
+function stopSim()   { running=false; cancelAnimationFrame(animId); }
+function resetSim()  { stopSim(); state=freshState(); eventLog=[]; renderAll(); renderEventLog(); setRunBtn(); }
+
+function setRunBtn() {
+  const btn = document.getElementById('run-btn');
+  btn.textContent = running ? '■ HALT' : '▶ RUN';
+  btn.className   = 'run-btn ' + (running ? 'running' : 'stopped');
+}
+
+function setBadge(txt, cls) {
+  const b = document.getElementById('badge');
+  b.textContent = txt;
+  b.className = 'badge' + (cls?' '+cls:'');
+}
+
+// ── Controls ──────────────────────────────────────────────────────
+document.getElementById('run-btn').onclick = () => {
+  running ? stopSim() : startSim();
+  setRunBtn();
+};
+document.getElementById('rst-btn').onclick = resetSim;
+
+document.getElementById('learn-btn').onclick = function() {
+  learning = !learning;
+  this.textContent = learning ? 'ON' : 'OFF';
+  this.className   = 'toggle-btn ' + (learning ? 'on' : 'off');
+};
+
+const sliders = [
+  {id:'s-inputRate',    key:'inputRate',    valId:'v-inputRate',    unit:'Hz'},
+  {id:'s-inputCurrent', key:'inputCurrent', valId:'v-inputCurrent', unit:'pA'},
+  {id:'s-noise',        key:'noise',        valId:'v-noise',        unit:''},
+  {id:'s-aPlus',        key:'aPlus',        valId:'v-aPlus',        unit:''},
+  {id:'s-aMinus',       key:'aMinus',       valId:'v-aMinus',       unit:''},
+];
+sliders.forEach(({id,key,valId,unit}) => {
+  document.getElementById(id).oninput = function() {
+    params[key] = parseFloat(this.value);
+    document.getElementById(valId).textContent = this.value + unit;
+  };
+});
+
+// Probe buttons
+const probeContainer = document.getElementById('probe-btns');
+NODES.forEach(n => {
+  const btn = document.createElement('button');
+  btn.textContent = n.label;
+  btn.className   = 'probe-btn ' + (n.id===selNeuron?'sel':'unsel');
+  btn.onclick = () => {
+    selNeuron = n.id;
+    document.getElementById('probe-label').textContent = n.label;
+    document.querySelectorAll('.probe-btn').forEach((b,i) => {
+      b.className = 'probe-btn ' + (NODES[i].id===selNeuron?'sel':'unsel');
+    });
+  };
+  probeContainer.appendChild(btn);
+});
+
+// Net canvas click to probe
+netCanvas.onclick = e => {
+  const rect = netCanvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top)  / rect.height;
+  let closest=8, dist=9999;
+  NODES.forEach(n => { const d=Math.hypot(n.x-mx, n.y-my); if(d<dist){dist=d;closest=n.id;} });
+  if (dist < 0.09) {
+    selNeuron = closest;
+    document.getElementById('probe-label').textContent = NODES[closest].label;
+    document.querySelectorAll('.probe-btn').forEach((b,i) => {
+      b.className = 'probe-btn ' + (NODES[i].id===selNeuron?'sel':'unsel');
+    });
+  }
+};
+
+// Resize observer
+const ro = new ResizeObserver(() => renderAll());
+[netCanvas, traceCanvas, wtCanvas, rasterCanvas].forEach(c => ro.observe(c));
+
+// Initial render
+renderAll();
+</script>
+</body>
+</html>
